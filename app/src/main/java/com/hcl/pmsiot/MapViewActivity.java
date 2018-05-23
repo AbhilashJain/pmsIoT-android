@@ -96,7 +96,6 @@ public class MapViewActivity extends AppCompatActivity implements OnMapReadyCall
     }
 
     private void startMqttService() {
-
         Intent i = new Intent(this, IotMqttService.class);
         i.putExtra("sapId", sapId);
         startService(i);
@@ -126,7 +125,7 @@ public class MapViewActivity extends AppCompatActivity implements OnMapReadyCall
             if(myLocation != null) {
                 longitude = myLocation.getLongitude();
                 latitude = myLocation.getLatitude();
-                CameraPosition cameraPosition = new CameraPosition.Builder().target(new LatLng(latitude, longitude)).zoom(17f).build();
+                CameraPosition cameraPosition = new CameraPosition.Builder().target(new LatLng(latitude, longitude)).zoom(19f).build();
                 mMap.animateCamera(CameraUpdateFactory.newCameraPosition(cameraPosition));
 
             }
