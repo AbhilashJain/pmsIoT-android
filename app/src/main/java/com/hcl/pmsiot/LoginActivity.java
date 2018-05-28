@@ -57,7 +57,7 @@ public class LoginActivity extends AppCompatActivity  {
         }
 
         if(isValid){
-            Intent intent = new Intent(this, MainActivity.class);
+            Intent intent = new Intent(this, MapViewActivity.class);
             intent.putExtra("sapId", inputSapId.getText().toString()); //Optional parameters
             this.startActivity(intent);
         }

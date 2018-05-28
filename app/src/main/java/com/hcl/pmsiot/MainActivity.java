@@ -8,6 +8,7 @@ import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.location.Location;
+import android.location.LocationManager;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
 import android.support.v4.app.ActivityCompat;
@@ -35,6 +36,7 @@ import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.MapFragment;
 import com.google.android.gms.maps.OnMapReadyCallback;
 import com.google.android.gms.maps.model.BitmapDescriptorFactory;
+import com.google.android.gms.maps.model.CameraPosition;
 import com.google.android.gms.maps.model.Circle;
 import com.google.android.gms.maps.model.CircleOptions;
 import com.google.android.gms.maps.model.LatLng;
@@ -67,7 +69,7 @@ public class MainActivity extends AppCompatActivity
     private TextView textLat, textLong;
     private Publisher pb;
     private MapFragment mapFragment;
-
+    private static final int LOCATION_PERMISSION_REQUEST_CODE = 1;
     private static final String NOTIFICATION_MSG = "NOTIFICATION MSG";
     // Create a Intent send by the notification
     public static Intent makeNotificationIntent(Context context, String msg) {
@@ -93,7 +95,8 @@ public class MainActivity extends AppCompatActivity
 
         // create GoogleApiClient
         createGoogleApi();
-        startMqttService();
+        //startMqttService();
+
     }
 
     // Create GoogleApiClient instance
@@ -203,10 +206,12 @@ public class MainActivity extends AppCompatActivity
     @Override
     public void onMapReady(GoogleMap googleMap) {
         Log.d(TAG, "onMapReady()");
-        map = googleMap;
-        map.setOnMapClickListener(this);
-        map.setOnMarkerClickListener(this);
+        this.map = googleMap;
+        this.map.setOnMapClickListener(this);
+        this.map.setOnMarkerClickListener(this);
+        this.map.getUiSettings().setZoomControlsEnabled(true);
     }
+
 
     @Override
     public void onMapClick(LatLng latLng) {
@@ -317,6 +322,9 @@ public class MainActivity extends AppCompatActivity
             float zoom = 19f;
             CameraUpdate cameraUpdate = CameraUpdateFactory.newLatLngZoom(latLng, zoom);
             map.animateCamera(cameraUpdate);
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+                map.setMyLocationEnabled(true);
+            }
         }
     }
 
