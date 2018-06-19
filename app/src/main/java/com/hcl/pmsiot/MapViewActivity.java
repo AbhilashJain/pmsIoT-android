@@ -13,7 +13,6 @@ import android.support.annotation.NonNull;
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AppCompatActivity;
-import android.support.v7.widget.Toolbar;
 import android.util.Log;
 import android.widget.Toast;
 
@@ -30,16 +29,24 @@ import com.google.android.gms.maps.SupportMapFragment;
 import com.google.android.gms.maps.model.BitmapDescriptorFactory;
 import com.google.android.gms.maps.model.CameraPosition;
 import com.google.android.gms.maps.model.LatLng;
+import com.google.android.gms.maps.model.Marker;
 import com.google.android.gms.maps.model.MarkerOptions;
-import com.google.android.gms.maps.model.Polygon;
 import com.google.android.gms.maps.model.PolygonOptions;
 import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 import com.google.gson.reflect.TypeToken;
-import com.hcl.pmsiot.data.Boudary;
-import com.hcl.pmsiot.data.Building;
-import com.hcl.pmsiot.data.BuildingBoundary;
+import com.hcl.pmsiot.constant.PmsConstant;
+import com.hcl.pmsiot.data.BoundaryData;
+import com.hcl.pmsiot.data.DashboardResponse;
+import com.hcl.pmsiot.data.LocationDetailData;
+import com.hcl.pmsiot.data.NotificationData;
+import com.hcl.pmsiot.data.UserDetailData;
 import com.hcl.pmsiot.service.IotMqttService;
+import com.hcl.pmsiot.service.MqttHelper;
+import com.hcl.pmsiot.service.MqttPublisher;
 
+import java.lang.reflect.Type;
+import java.text.MessageFormat;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -52,9 +59,10 @@ public class MapViewActivity extends AppCompatActivity implements OnMapReadyCall
     private String sapId;
     private Location myLocation;
     private double longitude, latitude;
-    private Publisher pb;
-    private MqttHelper mqttHelper;
-    private ArrayList<LatLng> arrayPoints = null;
+    private MqttPublisher pb;
+    private Gson gson;
+    private UserDetailData userDetailData;
+    private List<Marker> nearByMarker = new ArrayList<>();
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -63,8 +71,14 @@ public class MapViewActivity extends AppCompatActivity implements OnMapReadyCall
 
         Intent intent = getIntent();
         sapId = intent.getStringExtra("sapId");
-        pb = new Publisher(getApplicationContext(), this, sapId);
+        startMqttService(sapId);
 
+        pb = new MqttPublisher(getApplicationContext(), this, MessageFormat.format(PmsConstant.userNearbyNotificationTopic, sapId));
+
+        userDetailData = new UserDetailData();
+        userDetailData.setUserId(sapId);
+        userDetailData.setOnline(true);
+        gson = new Gson();
 
         /*arrayPoints.add(new LatLng(28.536988, 77.342913));
         arrayPoints.add(new LatLng(28.537119, 77.342617));
@@ -75,7 +89,7 @@ public class MapViewActivity extends AppCompatActivity implements OnMapReadyCall
 
         RequestQueue queue = Volley.newRequestQueue(this);
         // Instantiate the RequestQueue.
-        String url = "http://192.168.99.100:8074/allbuildings";
+        String url = PmsConstant.locationUrl;
 
         // Request a string response from the provided URL.
         StringRequest stringRequest = new StringRequest(Request.Method.GET, url,
@@ -84,19 +98,19 @@ public class MapViewActivity extends AppCompatActivity implements OnMapReadyCall
                     public void onResponse(String response) {
                         Log.i("Response", response);
                         // Display the first 500 characters of the response string.
-                        Gson gson = new Gson();
+                        GsonBuilder gson = new GsonBuilder();
                         try {
-                            List<BuildingBoundary> buildingBoundaryList = gson.fromJson(response, new TypeToken<List<BuildingBoundary>>() {
-                            }.getType());
-
-                            if (buildingBoundaryList != null) {
-                                for (BuildingBoundary buildingBoundary : buildingBoundaryList) {
-                                    arrayPoints = new ArrayList<>();
-                                    for (Boudary boudary : buildingBoundary.getBoudary()) {
-                                        arrayPoints.add(new LatLng(Double.parseDouble(boudary.getLatitude()), Double.parseDouble(boudary.getLongitude())));
+                            Type collectionType = new TypeToken<DashboardResponse<List<LocationDetailData>>>(){}.getType();
+                            DashboardResponse<List<LocationDetailData>> dashboardResponse = gson.create().fromJson(response, collectionType);
+                            List<LocationDetailData> locationList = dashboardResponse.getData();
+                            if (locationList != null) {
+                                for (LocationDetailData location : locationList) {
+                                    ArrayList<LatLng> arrayPoints  = new ArrayList<>();
+                                    for (BoundaryData boundary : location.getBoundary()) {
+                                        arrayPoints.add(new LatLng(boundary.getLatitude(), boundary.getLongitude()));
 
                                     }
-                                    countPolygonPoints();
+                                    drawPolygonPoints(arrayPoints, location.isMaster());
                                 }
                             }
                         } catch (Exception e) {
@@ -113,9 +127,9 @@ public class MapViewActivity extends AppCompatActivity implements OnMapReadyCall
                         }
                     });
         queue.add(stringRequest);
-        Toolbar tb = (Toolbar) findViewById(R.id.toolbar);
+        /*Toolbar tb = (Toolbar) findViewById(R.id.toolbar);
         setSupportActionBar(tb);
-        tb.setSubtitle("Your Location");
+        tb.setSubtitle("Your Location");*/
 
         SupportMapFragment mapFragment = (SupportMapFragment) getSupportFragmentManager()
                 .findFragmentById(R.id.map);
@@ -124,15 +138,14 @@ public class MapViewActivity extends AppCompatActivity implements OnMapReadyCall
         locationListener = new LocationListener() {
             @Override
             public void onLocationChanged(Location location) {
-                longitude = location.getLongitude();
-                latitude = location.getLatitude();
-                pb.setLat(latitude);
-                pb.setLongitute(longitude);
-                try {
 
-                    pb.publish("iot_data");
+                userDetailData.setLatitude(location.getLatitude());
+                userDetailData.setLongitude(location.getLongitude());
+                try {
+                    pb.publish(PmsConstant.userLocationTopic, gson.toJson(userDetailData));
                 } catch (Exception e) {
                     e.printStackTrace();
+                    Log.e("MapViewActivity", "Mqtt Publish Exception", e);
                 }
             }
 
@@ -153,10 +166,10 @@ public class MapViewActivity extends AppCompatActivity implements OnMapReadyCall
         };
 
 
-        startMqttService();
+
     }
 
-    private void startMqttService() {
+    private void startMqttService(String sapId) {
         Intent i = new Intent(this, IotMqttService.class);
         i.putExtra("sapId", sapId);
         startService(i);
@@ -222,35 +235,51 @@ public class MapViewActivity extends AppCompatActivity implements OnMapReadyCall
 
 
     @Override
-    public void messageArrived(String response) {
+    public void messageArrived(String topic, String response) {
         Log.i("MpViewActivity", response);
-        Gson gson = new Gson();
+
         try {
-            List<Building> buildings = gson.fromJson(response, new TypeToken<List<Building>>() {
+            NotificationData notificationData = gson.fromJson(response, new TypeToken<NotificationData>() {
             }.getType());
-            this.mMap.clear();
-            if (buildings != null) {
-                for (Building b : buildings) {
-                    mMap.addMarker(new MarkerOptions()
-                            .position(new LatLng(b.getLatitude(), b.getLongitude()))
-                            .title(b.getLocation())
-                            .icon(BitmapDescriptorFactory
-                                    .defaultMarker(BitmapDescriptorFactory.HUE_GREEN)));
+
+            //this.mMap.clear();
+            if (notificationData != null) {
+                if(notificationData.getData().containsKey("nearby")){
+                    List<LocationDetailData> locationList = gson.fromJson(notificationData.getData().get("nearby"), new TypeToken<List<LocationDetailData>>() {}.getType());
+                    if(locationList != null) {
+                        removeMarker();
+                        for(LocationDetailData location  : locationList) {
+                            nearByMarker.add(mMap.addMarker(new MarkerOptions()
+                                    .position(new LatLng(location.getLatitude(), location.getLongitude()))
+                                    .title(location.getName())
+                                    .icon(BitmapDescriptorFactory
+                                            .defaultMarker(BitmapDescriptorFactory.HUE_GREEN))));
+                        };
+
+                    }
                 }
+
             }
         } catch (Exception e) {
+            Log.e(this.getClass().getSimpleName(), "Mqtt Message Arrived Exception", e);
             e.printStackTrace();
         }
     }
 
-    public void countPolygonPoints() {
+    private void removeMarker(){
+        for(Marker marker :nearByMarker){
+            marker.remove();
+        }
+    }
+    private void drawPolygonPoints(ArrayList<LatLng> arrayPoints, boolean isMaster) {
         if (arrayPoints.size() >= 3) {
             PolygonOptions polygonOptions = new PolygonOptions();
             polygonOptions.addAll(arrayPoints);
             polygonOptions.strokeColor(Color.BLUE);
             polygonOptions.strokeWidth(7);
-            polygonOptions.fillColor(Color.CYAN);
-            Polygon polygon = mMap.addPolygon(polygonOptions);
+            if(!isMaster)
+                polygonOptions.fillColor(Color.CYAN);
+            mMap.addPolygon(polygonOptions);
         }
     }
 

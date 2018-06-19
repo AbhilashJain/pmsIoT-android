@@ -9,16 +9,26 @@ import android.support.annotation.Nullable;
 import android.support.v4.app.NotificationCompat;
 import android.util.Log;
 
-import com.hcl.pmsiot.MqttHelper;
+import com.google.gson.Gson;
 import com.hcl.pmsiot.R;
+import com.hcl.pmsiot.constant.PmsConstant;
+import com.hcl.pmsiot.data.NotificationData;
 
 import org.eclipse.paho.client.mqttv3.IMqttDeliveryToken;
 import org.eclipse.paho.client.mqttv3.MqttCallbackExtended;
 import org.eclipse.paho.client.mqttv3.MqttMessage;
 
+import java.text.MessageFormat;
+import java.util.ArrayList;
+import java.util.List;
+
 public class IotMqttService extends Service {
 
     private MqttHelper mqttHelper;
+
+    private String sapId ;
+
+    private List<String> subscribeTopicList;
 
     @Nullable
     @Override
@@ -29,7 +39,10 @@ public class IotMqttService extends Service {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        startMqtt(intent.getStringExtra("sapId"));
+        sapId = intent.getStringExtra("sapId");
+        subscribeTopicList = new ArrayList<>();
+        subscribeTopicList.add(MessageFormat.format(PmsConstant.userNotificationTopic, sapId));
+        startMqtt(subscribeTopicList);
         return START_STICKY;
     }
 
@@ -38,9 +51,9 @@ public class IotMqttService extends Service {
         super.onDestroy();
     }
 
-    private void startMqtt(String sapId){
+    private void startMqtt(List<String> subscribeTopics){
 
-        mqttHelper = new MqttHelper(getApplicationContext(), sapId);
+        mqttHelper = new MqttHelper(getApplicationContext(), subscribeTopics);
         mqttHelper.setCallback(new MqttCallbackExtended() {
             @Override
             public void connectComplete(boolean b, String s) {
@@ -53,20 +66,25 @@ public class IotMqttService extends Service {
             }
 
             @Override
-            public void messageArrived(String topic, MqttMessage mqttMessage) throws Exception {
+            public void messageArrived(String topic, MqttMessage mqttMessage){
                 Log.w("Debug",mqttMessage.toString());
-                NotificationCompat.Builder mBuilder =
-                        new NotificationCompat.Builder(getApplicationContext())
-                                .setSmallIcon(R.drawable.ic_launcher)
-                                .setContentTitle("Mqtt Response")
-                                .setContentText(mqttMessage.toString());
+                if(topic.equals(MessageFormat.format(PmsConstant.userNotificationTopic, sapId))) {
+                    Gson gson = new Gson();
+                    NotificationData notificationData = gson.fromJson(mqttMessage.toString(), NotificationData.class);
+                    NotificationCompat.Builder mBuilder =
+                            new NotificationCompat.Builder(getApplicationContext())
+                                    .setSmallIcon(R.drawable.ic_launcher)
+                                    .setContentTitle(notificationData.getTitle())
+                                    .setContentText(notificationData.getBody());
 
 
-                // Gets an instance of the NotificationManager service//
+                    // Gets an instance of the NotificationManager service//
 
-                NotificationManager mNotificationManager =
-                        (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
-                mNotificationManager.notify(001, mBuilder.build());
+                    NotificationManager mNotificationManager =
+                            (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+
+                    mNotificationManager.notify((int)Math.random(), mBuilder.build());
+                }
 
             }
 

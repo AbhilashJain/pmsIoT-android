@@ -1,8 +1,9 @@
-package com.hcl.pmsiot;
+package com.hcl.pmsiot.service;
 
 import android.content.Context;
 import android.util.Log;
 
+import com.hcl.pmsiot.PmsMqttCallBack;
 import com.hcl.pmsiot.constant.PmsConstant;
 
 import org.eclipse.paho.android.service.MqttAndroidClient;
@@ -10,6 +11,7 @@ import org.eclipse.paho.client.mqttv3.IMqttActionListener;
 import org.eclipse.paho.client.mqttv3.IMqttDeliveryToken;
 import org.eclipse.paho.client.mqttv3.IMqttToken;
 import org.eclipse.paho.client.mqttv3.MqttCallbackExtended;
+import org.eclipse.paho.client.mqttv3.MqttClient;
 import org.eclipse.paho.client.mqttv3.MqttException;
 import org.eclipse.paho.client.mqttv3.MqttMessage;
 
@@ -17,21 +19,19 @@ import java.io.UnsupportedEncodingException;
 
 import static android.content.ContentValues.TAG;
 
-public class Publisher {
+public class MqttPublisher {
 
     MqttAndroidClient client ;
     Context context;
-    String sapId;
 
-    public Publisher(Context context,final PmsMqttCallBack mqttCallBack, final String sapId){
+    public MqttPublisher(Context context, final PmsMqttCallBack mqttCallBack, final String subscribeTopic){
         this.context = context;
-        this.sapId = sapId;
-        this.client = new MqttAndroidClient(context, PmsConstant.MqttUrl,
-                sapId);
+        this.client = new MqttAndroidClient(context, PmsConstant.MqttUrl,  MqttClient.generateClientId());
         this.client.setCallback(new MqttCallbackExtended() {
             @Override
             public void connectComplete(boolean b, String s) {
-                subscribeToTopic(sapId);
+                if(subscribeTopic != null)
+                    subscribeToTopic(subscribeTopic);
             }
             @Override
             public void connectionLost(Throwable throwable) {
@@ -41,8 +41,8 @@ public class Publisher {
             public void messageArrived(String topic, MqttMessage mqttMessage) throws Exception {
                 Log.w("Debug",mqttMessage.toString());
                 if(mqttCallBack != null)
-                    mqttCallBack.messageArrived(mqttMessage.toString());
-                client.disconnect();
+                    mqttCallBack.messageArrived(topic, mqttMessage.toString());
+                //client.disconnect();
             }
             @Override
             public void deliveryComplete(IMqttDeliveryToken iMqttDeliveryToken) {
@@ -56,7 +56,7 @@ public class Publisher {
     private double longitute;
 
     //private String deviceId = Settings.Secure.getString(context.getContentResolver(), Settings.Secure.ANDROID_ID);
-    public void publish(final String topic) {
+    public void publish(final String topic, final String payload) {
         //String clientId = MqttClient.generateClientId();
         try {
             IMqttToken token = client.connect();
@@ -67,7 +67,7 @@ public class Publisher {
                     //Log.d(TAG, "Device id"+deviceId);
                     Log.d(TAG, "onSuccess");
                     //String topic = "iot_data";
-                    String payload = "(" + getLat() + "," + getLongitute()+ "," + sapId+")";
+                    //String payload = "(" + getLat() + "," + getLongitute()+ "," + sapId+")";
                     byte[] encodedPayload = new byte[0];
 
                     try {
@@ -95,9 +95,8 @@ public class Publisher {
         }
     }
 
-    private void subscribeToTopic(String sapId) {
+    private void subscribeToTopic(String subscriptionTopic) {
         try {
-            String subscriptionTopic = "processed_data/"+sapId;
             this.client.subscribe(subscriptionTopic, 0, null, new IMqttActionListener() {
                 @Override
                 public void onSuccess(IMqttToken asyncActionToken) {
@@ -111,7 +110,7 @@ public class Publisher {
             });
 
         } catch (MqttException ex) {
-            System.err.println("Exceptionst subscribing");
+            Log.e(TAG, "Exceptionst subscribing", ex);
             ex.printStackTrace();
         }
     }

@@ -1,4 +1,4 @@
-package com.hcl.pmsiot;
+package com.hcl.pmsiot.service;
 
 import android.content.Context;
 import android.util.Log;
@@ -16,36 +16,37 @@ import org.eclipse.paho.client.mqttv3.MqttConnectOptions;
 import org.eclipse.paho.client.mqttv3.MqttException;
 import org.eclipse.paho.client.mqttv3.MqttMessage;
 
+import java.util.List;
+
 public class MqttHelper {
+
     public MqttAndroidClient mqttAndroidClient;
 
     final String serverUri = PmsConstant.MqttUrl;
 
     final String clientId = MqttClient.generateClientId();
-    String subscriptionTopic = "processed_data";
 
-    String sapId = "";
+
     //final String username = "xxxxxxx";
     //final String password = "yyyyyyyyyy";
 
-    public MqttHelper(Context context, String sapId){
+    public MqttHelper(Context context, List<String> topics){
 
-        this.sapId = sapId;
         mqttAndroidClient = new MqttAndroidClient(context, serverUri, clientId);
         mqttAndroidClient.setCallback(new MqttCallbackExtended() {
             @Override
             public void connectComplete(boolean b, String s) {
-                Log.w("mqtt", s);
+                Log.d(this.getClass().getSimpleName(), s);
             }
 
             @Override
             public void connectionLost(Throwable throwable) {
-
+                Log.e(this.getClass().getSimpleName(), "Mqtt Connection Lost", throwable);
             }
 
             @Override
             public void messageArrived(String topic, MqttMessage mqttMessage) throws Exception {
-                Log.w("Mqtt", mqttMessage.toString());
+                Log.d(this.getClass().getSimpleName(), mqttMessage.toString());
             }
 
             @Override
@@ -53,7 +54,7 @@ public class MqttHelper {
 
             }
         });
-        connect();
+        connect(topics);
     }
 
     public void setCallback(MqttCallbackExtended callback) {
@@ -61,7 +62,7 @@ public class MqttHelper {
     }
 
 
-    private void connect(){
+    private void connect(final List<String> topicNames){
         MqttConnectOptions mqttConnectOptions = new MqttConnectOptions();
         mqttConnectOptions.setAutomaticReconnect(true);
         mqttConnectOptions.setCleanSession(false);
@@ -80,12 +81,12 @@ public class MqttHelper {
                     disconnectedBufferOptions.setPersistBuffer(false);
                     disconnectedBufferOptions.setDeleteOldestMessages(false);
                     mqttAndroidClient.setBufferOpts(disconnectedBufferOptions);
-                    subscribeToTopic();
+                    subscribeToTopic(topicNames);
                 }
 
                 @Override
                 public void onFailure(IMqttToken asyncActionToken, Throwable exception) {
-                    Log.w("Mqtt", "Failed to connect to: " + serverUri + exception.toString());
+                    Log.e(this.getClass().getSimpleName(), "Failed to connect to: " + serverUri + exception.toString());
                 }
             });
 
@@ -96,24 +97,13 @@ public class MqttHelper {
     }
 
 
-    private void subscribeToTopic() {
+    private void subscribeToTopic(List<String> topicNames) {
         try {
-            subscriptionTopic = subscriptionTopic +"/"+sapId;
-            mqttAndroidClient.subscribe(subscriptionTopic, 0, null, new IMqttActionListener() {
-                @Override
-                public void onSuccess(IMqttToken asyncActionToken) {
-                    Log.w("Mqtt","Subscribed!");
-                }
-
-                @Override
-                public void onFailure(IMqttToken asyncActionToken, Throwable exception) {
-                    Log.w("Mqtt", "Subscribed fail!");
-                }
-            });
+            mqttAndroidClient.subscribe(topicNames.toArray(new String[topicNames.size()]), new int[]{0});
 
         } catch (MqttException ex) {
-            System.err.println("Exceptionst subscribing");
-            ex.printStackTrace();
+            Log.e(this.getClass().getSimpleName(),"Exception subscribing topics "+ topicNames, ex);
+
         }
     }
 }
